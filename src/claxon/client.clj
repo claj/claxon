@@ -115,6 +115,6 @@
 (comment
   (set! *warn-on-reflection* true)
 
-  (def conn (connect {:tls true :claxon/verify-tls false}))
+  (def conn (connect {:claxon/verify-tls false}))
 
   (close conn))

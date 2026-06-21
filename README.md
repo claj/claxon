@@ -44,7 +44,13 @@ The following are **not yet implemented** but planned:
 
 ## Installation
 
-TODO
+#### Clojure CLI/deps.edn
+
+```clojure
+{io.github.lispyclouds/claxon {:git/sha "<LATEST COMMIT SHA>"}}
+```
+
+TODO: clojars release
 
 ## Public API
 

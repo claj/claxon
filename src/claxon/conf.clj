@@ -6,7 +6,11 @@
 
 (defn defaults
   []
-  {:claxon/urls ["nats://localhost:4222"]
+  {:verbose false
+   :pedantic false
+   :lang "clojure"
+   :name "claxon"
+   :claxon/urls ["nats://localhost:4222"]
    :claxon/timeout-ms 2000
    :claxon/executor (Executors/newVirtualThreadPerTaskExecutor)
    :claxon/handlers {{:op "PING"} (fn [_ conn] (iw/snd conn "PONG" nil nil))}
