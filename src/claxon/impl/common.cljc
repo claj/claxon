@@ -4,7 +4,9 @@
       :clj [clojure.data.json :as json])
    [clojure.string :as str])
   (:import
-   [java.net URI]))
+   [java.io Writer]
+   [java.net URI]
+   [java.util.concurrent ExecutorService]))
 
 (def read-json #?(:bb json/parse-string :clj json/read-str))
 (def write-json #?(:bb json/generate-string :clj json/write-str))
@@ -47,19 +49,22 @@
           sub))
 
 (defn dispatch
-  [frame handlers conn]
+  [frame handlers {:keys [executor] :as conn}]
   (->> handlers
        (filter (fn [handler]
                  (let [{:keys [op args]} (:matches handler)]
                    (and (= (:id conn) (:conn handler))
                         (= op (:op frame))
                         (submap? (:args frame) args)))))
-       ;; TODO: Invoke all concurrently on the executor, making sure the writer is synchronised
-       (run! #(try
-                ((:fn %) frame conn)
-                (catch Exception e
-                  (binding [*out* *err*]
-                    (println (str "Error running handler: " e))))))))
+       (run! (fn [handler]
+               (let [task (bound-fn []
+                            (try
+                              ((:fn handler) frame conn)
+                              (catch Exception e
+                                (let [^Writer w *err*]
+                                  (.write w (str "Error running handler: " e "\n"))
+                                  (.flush w)))))]
+                 (ExecutorService/.submit executor ^Runnable task))))))
 
 (comment
   (set! *warn-on-reflection* true)

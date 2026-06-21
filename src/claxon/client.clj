@@ -8,7 +8,8 @@
   (:import
    [java.io BufferedInputStream BufferedOutputStream]
    [java.net InetSocketAddress Socket]
-   [java.util.concurrent ExecutorService]))
+   [java.util.concurrent ExecutorService]
+   [java.util.concurrent.locks ReentrantLock]))
 
 (defn add-handler
   "Registers handler to be called on conn whenever an incoming frame matches op and args (a submap match).
@@ -70,7 +71,8 @@
                :in in
                :out out
                :executor executor
-               :frame-shapes frame-shapes}
+               :frame-shapes frame-shapes
+               :write-lock (ReentrantLock.)}
          info (-> in
                   (ir/read-frame frame-shapes)
                   :args
@@ -116,7 +118,5 @@
   (set! *warn-on-reflection* true)
 
   (def conn (connect {:claxon/verify-tls false}))
-
-  (invoke conn {:op "PING"})
 
   (close conn))

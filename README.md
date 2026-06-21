@@ -15,7 +15,7 @@ claxon takes the other path. The [NATS client protocol](https://docs.nats.io/ref
 The result is:
 
 - **Babashka-compatible.** claxon runs as a script, in a `bb.edn` project, or embedded in a larger bb-based tool, with no AOT compilation and no native dependencies beyond the JVM/GraalVM that bb already ships.
-- **Small, inspectable and flexible** The entire protocol surface is described as data in one map (`claxon.conf/defaults`'s `:claxon/frame-shapes`) ops, their arguments, and their payloads. Reading and writing frames are both generic interpreters over that data, not one function per operation. Additionaly, the default protocol behaviour can be influenced and new things added, all from the userland.
+- **Small, inspectable and flexible** The entire protocol surface is described as data in one map (`claxon.conf/defaults`'s `:claxon/frame-shapes`) ops, their arguments, and their payloads. Reading and writing frames are both generic interpreters over that data, not one function per operation. Additionally, the default protocol behaviour can be influenced and new things added, all from the userland.
 - **Lightweight.** No dependency on `nats.java`. The only third-party dependency is a JSON library (`clojure.data.json` on the JVM, `cheshire` on bb, picked automatically via reader conditionals), used only for `INFO`/`CONNECT` payloads.
 - **Data in, data out.** Frames are Clojure maps. Connecting, publishing, subscribing, and handling messages are all just `assoc`-able data.
 
@@ -130,6 +130,9 @@ Tears down the connection: removes its handlers, closes the socket streams, shut
 ```
 
 ## Examples
+
+The best way to know what each option's type and values could be is to refer the [Protocol Docs](https://docs.nats.io/reference/reference-protocols/nats-protocol) directly.
+All values would be passed as described.
 
 ### publish and subscribe
 

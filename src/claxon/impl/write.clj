@@ -3,7 +3,8 @@
    [claxon.impl.common :as ic]
    [clojure.string :as str])
   (:import
-   [java.io OutputStream]))
+   [java.io OutputStream]
+   [java.util.concurrent.locks ReentrantLock]))
 
 (defn encode-headers-block
   [{:keys [headers status description]}]
@@ -60,7 +61,7 @@
            (str/join " ")))))
 
 (defn snd
-  [{:keys [^OutputStream out frame-shapes]} op args payloads]
+  [{:keys [^OutputStream out frame-shapes ^ReentrantLock write-lock]} op args payloads]
   (let [shape (get frame-shapes op)]
     (when-not shape
       (throw (ex-info "unknown op" {:op op})))
@@ -71,10 +72,15 @@
           full-args (merge args length-args)
           args-line (render-args-line (:args shape) full-args)
           control (str op (when (seq args-line)
-                            (str " " args-line)) "\r\n")]
-      (.write out (.getBytes control "UTF-8"))
-      (.flush out)
-      (when (seq encoded)
-        (run! #(.write out ^bytes %) encoded)
-        (.write out (.getBytes "\r\n" "UTF-8"))
-        (.flush out)))))
+                            (str " " args-line)) "\r\n")
+          lock (or write-lock (ReentrantLock.))]
+      (.lock lock)
+      (try
+        (.write out (.getBytes control "UTF-8"))
+        (.flush out)
+        (when (seq encoded)
+          (run! #(.write out ^bytes %) encoded)
+          (.write out (.getBytes "\r\n" "UTF-8"))
+          (.flush out))
+        (finally
+          (.unlock lock))))))
