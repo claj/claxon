@@ -117,4 +117,6 @@
 
   (def conn (connect {:claxon/verify-tls false}))
 
+  (invoke conn {:op "PING"})
+
   (close conn))

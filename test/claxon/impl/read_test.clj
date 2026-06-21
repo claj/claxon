@@ -170,6 +170,15 @@
                          {:name :bytes :type :int}]
                         "FOO 9 11"))))
 
+(deftest parse-args-tab-delimited-tokens
+  (testing "tab is a valid field delimiter per the protocol spec, same as space"
+    (is (= {:subject "FOO" :sid "9" :bytes 11}
+           (ir/parse-args [{:name :subject :type :str}
+                           {:name :sid :type :str}
+                           {:name :reply-to :type :str :optional true}
+                           {:name :bytes :type :int}]
+                          "FOO\t9\t11")))))
+
 ;; ---------------------------------------------------------------------------
 ;; parse-headers-block
 ;; ---------------------------------------------------------------------------
@@ -319,6 +328,16 @@
   (let [frame (ir/read-frame (->stream "PUB FRONT.DOOR JOKE.22 11\r\nKnock Knock\r\n") default-shapes)]
     (is (= {:subject "FRONT.DOOR" :reply-to "JOKE.22" :bytes 11} (:args frame)))
     (is (= "Knock Knock" (String. ^bytes (:body frame) "UTF-8")))))
+
+(deftest read-frame-op-tab-delimited
+  (let [frame (ir/read-frame (->stream "PUB\tFOO\t11\r\nHello NATS!\r\n") default-shapes)]
+    (is (= "PUB" (:op frame)))
+    (is (= {:subject "FOO" :bytes 11} (:args frame)))
+    (is (= "Hello NATS!" (String. ^bytes (:body frame) "UTF-8")))))
+
+(deftest read-frame-args-mixed-space-and-tab-delimited
+  (let [frame (ir/read-frame (->stream "MSG FOO.BAR\t9\tGREETING.34 11\r\nHello World\r\n") default-shapes)]
+    (is (= {:subject "FOO.BAR" :sid "9" :reply-to "GREETING.34" :bytes 11} (:args frame)))))
 
 (deftest read-frame-pub-empty-payload
   (let [frame (ir/read-frame (->stream "PUB NOTIFY 0\r\n\r\n") default-shapes)]

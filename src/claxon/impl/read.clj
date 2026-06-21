@@ -81,7 +81,7 @@
         {name (case type
                 :json (ic/read-json rest-line)
                 rest-line)})
-      (parse-tokenized-args arg-specs (str/split rest-line #" +")))))
+      (parse-tokenized-args arg-specs (str/split rest-line #"[ \t]+")))))
 
 (defn parse-headers-block
   [^bytes raw]
@@ -136,14 +136,9 @@
 (defn read-frame
   [in shapes]
   (let [line (read-all in)
-        sp (String/.indexOf line " ")
-        op (str/upper-case
-            (if (neg? sp)
-              line
-              (subs line 0 sp)))
-        rest-line (if (neg? sp)
-                    ""
-                    (subs line (inc sp)))
+        [op-tok rest-line] (str/split line #"[ \t]+" 2)
+        op (str/upper-case op-tok)
+        rest-line (or rest-line "")
         shape (get shapes op)]
     (when-not shape
       (throw (ex-info "unknown op" {:op op :line line})))
