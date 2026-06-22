@@ -4,7 +4,6 @@
       :clj [clojure.data.json :as json])
    [clojure.string :as str])
   (:import
-   [java.io Writer]
    [java.net URI]
    [java.util.concurrent ExecutorService]))
 
@@ -49,7 +48,7 @@
           sub))
 
 (defn dispatch
-  [frame handlers {:keys [executor] :as conn}]
+  [frame handlers {:keys [^ExecutorService executor] :as conn}]
   (->> handlers
        (filter (fn [handler]
                  (let [{:keys [op args]} (:matches handler)]
@@ -57,14 +56,13 @@
                         (= op (:op frame))
                         (submap? (:args frame) args)))))
        (run! (fn [handler]
-               (let [task (bound-fn []
+               (let [task (bound-fn [] ;; bound-fn captures scope before dispatching on a thread
                             (try
                               ((:fn handler) frame conn)
                               (catch Exception e
-                                (let [^Writer w *err*]
-                                  (.write w (str "Error running handler: " e "\n"))
-                                  (.flush w)))))]
-                 (ExecutorService/.submit executor ^Runnable task))))))
+                                (when-let [efn (:efn handler)]
+                                  (efn frame conn e)))))]
+                 (.submit executor ^Runnable task))))))
 
 (comment
   (set! *warn-on-reflection* true)

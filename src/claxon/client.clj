@@ -13,16 +13,21 @@
 
 (defn add-handler
   "Registers handler to be called on conn whenever an incoming frame matches op and args (a submap match).
+  Takes in an optional error-handler in case of uncaught exceptions in the handler.
+  The handler will be passed in the frame and conn, the err-handler the exception as well.
   Returns a handler id, usable with remove-handler."
-  [conn handler {:keys [op args]}]
-  (let [id (swap! ic/handler-ids inc)]
-    (swap! ic/handlers
-           conj
-           {:id id
-            :conn (:id conn)
-            :fn handler
-            :matches {:op op :args args}})
-    id))
+  ([conn handler matches]
+   (add-handler conn handler nil matches))
+  ([conn handler err-handler {:keys [op args]}]
+   (let [id (swap! ic/handler-ids inc)]
+     (swap! ic/handlers
+            conj
+            {:id id
+             :conn (:id conn)
+             :fn handler
+             :efn err-handler
+             :matches {:op op :args args}})
+     id)))
 
 (defn remove-handler
   "Unregisters the handler with the given id, as returned by add-handler."
@@ -91,8 +96,8 @@
                                   .getOutputStream
                                   BufferedOutputStream.)))
                 conn)]
-     (run! (fn [[{:keys [op args]} f]]
-             (add-handler conn f {:op op :args args}))
+     (run! (fn [[{:keys [op args]} {:keys [f ef]}]]
+             (add-handler conn f ef {:op op :args args}))
            handlers)
      (ir/start conn)
      (iw/snd conn
@@ -118,5 +123,7 @@
   (set! *warn-on-reflection* true)
 
   (def conn (connect {:claxon/verify-tls false}))
+
+  (invoke conn {:op "PING"})
 
   (close conn))

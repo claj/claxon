@@ -138,17 +138,62 @@
 (deftest dispatch-no-matching-handlers-is-a-noop
   (is (nil? (sync-dispatch! {:op "PING"} [] {:id "conn-a" :executor (->executor)}))))
 
-(deftest dispatch-handler-exception-does-not-propagate
-  (testing "an exception thrown by one handler does not stop dispatch or escape to the caller"
+(deftest dispatch-handler-exception-without-efn-is-swallowed
+  (testing "an exception thrown by a handler with no :efn does not stop
+            dispatch, crash the task, or escape to the caller -- it is
+            simply swallowed"
     (let [conn-a {:id "conn-a" :executor (->executor)}
           calls (atom [])
           handlers [{:conn "conn-a" :matches {:op "PING" :args nil}
                      :fn (fn [_ _] (throw (ex-info "boom" {})))}
                     {:conn "conn-a" :matches {:op "PING" :args nil}
                      :fn (fn [_ _] (swap! calls conj :ran))}]]
-      (binding [*err* (java.io.StringWriter.)]
-        (is (nil? (sync-dispatch! {:op "PING"} handlers conn-a))))
+      (is (nil? (sync-dispatch! {:op "PING"} handlers conn-a)))
       (is (= [:ran] @calls)))))
+
+(deftest dispatch-runs-efn-on-handler-exception
+  (testing "a handler's :efn is called with frame, conn, and the exception
+            when its :fn throws"
+    (let [seen (atom nil)
+          conn-a {:id "conn-a" :executor (->executor)}
+          handlers [{:conn "conn-a" :matches {:op "PING" :args nil}
+                     :fn (fn [_ _] (throw (ex-info "boom" {})))
+                     :efn (fn [frame conn e] (reset! seen [frame conn e]))}]]
+      (sync-dispatch! {:op "PING"} handlers conn-a)
+      (let [[frame conn e] @seen]
+        (is (= {:op "PING"} frame))
+        (is (= conn-a conn))
+        (is (= "boom" (ex-message e)))))))
+
+(deftest dispatch-efn-can-surface-errors-without-logging
+  (testing ":efn gives a caller a hook to surface a handler's exception
+            however they choose -- e.g. onto a queue for later inspection
+            -- as an alternative to the library doing any logging itself"
+    (let [errors (atom [])
+          conn-a {:id "conn-a" :executor (->executor)}
+          handlers [{:conn "conn-a" :matches {:op "PING" :args nil}
+                     :fn (fn [_ _] (throw (ex-info "boom" {:detail 42})))
+                     :efn (fn [_ _ e] (swap! errors conj (ex-data e)))}]]
+      (binding [*err* (java.io.StringWriter.)]
+        (sync-dispatch! {:op "PING"} handlers conn-a)
+        (testing "nothing was written to *err* -- :efn took over entirely"
+          (is (= "" (str *err*)))))
+      (is (= [{:detail 42}] @errors)))))
+
+(deftest dispatch-efn-sees-callers-dynamic-bindings
+  (testing ":efn runs inside the task submitted to the executor, on a
+            different thread than the one that called dispatch -- bound-fn
+            is what makes a caller's binding (e.g. redirecting *out*
+            around connect) still visible to :efn when it runs there"
+    (let [conn-a {:id "conn-a" :executor (->executor)}
+          captured (atom nil)
+          handlers [{:conn "conn-a" :matches {:op "PING" :args nil}
+                     :fn (fn [_ _] (throw (ex-info "boom" {})))
+                     :efn (fn [_ _ _] (reset! captured *out*))}]
+          custom-out (java.io.StringWriter.)]
+      (binding [*out* custom-out]
+        (sync-dispatch! {:op "PING"} handlers conn-a))
+      (is (= custom-out @captured)))))
 
 (deftest dispatch-passes-conn-through-to-handler
   (let [conn-a {:id "conn-a" :extra :data :executor (->executor)}
