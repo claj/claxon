@@ -8,7 +8,7 @@ A minimal, pure-Clojure, data-driven [NATS](https://nats.io) client.
 
 ## Rationale
 
-Most Clojure NATS clients are thin wrappers around the official Java SDK (`nats.java`). That's a perfectly reasonable choice, but it comes with a JVM tax: you get nats.java' threading model, its option-builder classes, and a hard dependency on a full JVM, which means no Babashka.
+Most Clojure NATS clients are thin wrappers around the official Java SDK (`nats.java`). That's a perfectly reasonable choice, but it comes with a JVM tax: you get nats.java's threading model, its option-builder classes, and a hard dependency on a full JVM, which means no runtimes like Babashka.
 
 claxon takes the other path. The [NATS client protocol](https://docs.nats.io/reference/reference-protocols/nats-protocol) is a small, text-based, line-oriented protocol. claxon implements the protocol directly against a plain `java.net.Socket`, using nothing but Clojure data to describe the wire format.
 
@@ -33,14 +33,14 @@ claxon is deliberately a _protocol_ client, not a full-featured NATS SDK. It doe
 
 ## Roadmap
 
-Current status: Maturing
+**Current status: Stabilising**
 
-The following are **not yet implemented** but planned:
+The following are **not yet implemented** but planned in order of priority:
 
-- **Advanced Authentication** No NKey/JWT signing of the `INFO` nonce yet.
 - **WebSocket transport.** Only raw TCP sockets are supported as of now.
 - **Editor integration** Since the protocol is spec driven, clj-kondo/clojure-lsp can be hooked in to provide real time feedback on function calls.
-- Maybe some JetStream abstractions.
+- **Advanced Authentication** No NKey/JWT signing of the `INFO` nonce yet.
+- Maybe JetStream abstractions.
 
 ## Installation
 
@@ -103,16 +103,17 @@ Sends a frame to the server. `frame` is a map of `{:op ... :args ... :payloads .
 
 `:args` and `:payloads` only need to contain what the op actually requires see `claxon.conf/defaults`'s `:claxon/frame-shapes` for the full list of ops and their fields (`PUB`, `HPUB`, `SUB`, `UNSUB`, `PING`, `PONG`, etc). Byte counts (`:bytes`, `:hdr-bytes`) are always computed for you; don't pass them yourself.
 
-### `(add-handler conn handler matcher)`
+### `(add-handler conn handler matcher) / (add-handler conn handler err-handler matcher)`
 
 Registers a callback for incoming frames isolated to the connection. `matcher` is `{:op ... :args ...}`; `:args` is matched as a submap, so you can match loosely (e.g. only on `:subject`) or leave it out to match any args. Returns the handler id.
+Optionally takes in an error handler which will be invoked with the uncaught exception in the handler. Note: if there's an uncaught error in the err handler, **it will be swallowed**.
 
 ```clojure
 (nats/add-handler conn
   (fn [frame _conn]
-    (println "got message on" (get-in frame [:args :subject])
-              "->" (String. (:body frame) "UTF-8")))
-  {:op "MSG" :args {:subject "greetings"}})
+    (println "got message on" (get-in frame [:args :subject]) "->" (String. (:body frame) "UTF-8")))
+  (fn [fram conn ex] (println "Unhandled error " ex " on frame " frame " and conn " conn))
+  {:op "MSG" :args {:subject "greetings"}}
 ```
 
 The handler receives `(frame conn)` the parsed frame and the connection it arrived on. Handlers run on the background reader thread; keep them fast or hand off work yourself (e.g. via `future` or a queue).
@@ -120,6 +121,10 @@ The handler receives `(frame conn)` the parsed frame and the connection it arriv
 ### `(remove-handler id)`
 
 Removes/Unregisters a handler by id. no-op if not found.
+
+```clojure
+(nats/remove-handler id)
+```
 
 ### `(close conn)`
 
