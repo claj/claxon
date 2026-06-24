@@ -52,16 +52,19 @@
                  claxon/handlers
                  claxon/verify-tls
                  claxon/frame-shapes]} opts
-         {:keys [host port ^Socket socket]}
+         {:keys [host port user password token ^Socket socket]}
          (->> urls
               (map ic/parse-nats-url)
               (shuffle)
-              (some (fn [{:keys [^String host ^Integer port]}]
+              (some (fn [{:keys [^String host ^Integer port user password token]}]
                       (try
                         {:socket (doto (Socket.)
                                    (.connect (InetSocketAddress. host port) timeout-ms))
                          :host host
-                         :port port}
+                         :port port
+                         :user user
+                         :password password
+                         :token token}
                         (catch Exception _ false)))))
          _ (when-not socket
              (throw (ex-info "Cannot connect to any of the urls" {:urls urls})))
@@ -100,16 +103,23 @@
              (add-handler conn f ef {:op op :args args}))
            handlers)
      (ir/start conn)
-     (iw/snd conn
-             "CONNECT"
-             {:opts (dissoc opts
-                            :claxon/urls
-                            :claxon/timeout-ms
-                            :claxon/executor
-                            :claxon/handlers
-                            :claxon/verify-tls
-                            :claxon/frame-shapes)}
-             nil)
+     ;; Auth parsed from the connected url's userinfo, mapped to the field
+     ;; names NATS expects. Explicit opts win, so callers can override the url.
+     (let [url-auth (cond-> {}
+                      user     (assoc :user user)
+                      password (assoc :pass password)
+                      token    (assoc :auth_token token))]
+       (iw/snd conn
+               "CONNECT"
+               {:opts (merge url-auth
+                             (dissoc opts
+                                     :claxon/urls
+                                     :claxon/timeout-ms
+                                     :claxon/executor
+                                     :claxon/handlers
+                                     :claxon/verify-tls
+                                     :claxon/frame-shapes))}
+               nil))
      conn)))
 
 (defn close
